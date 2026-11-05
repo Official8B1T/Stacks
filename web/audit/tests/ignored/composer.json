@@ -1,0 +1,15 @@
+{
+    "name": "stacks/audit-fixture",
+    "description": "Audit test fixture",
+    "license": "proprietary",
+    "require": {
+        "symfony/yaml": "7.4.21"
+    },
+    "config": {
+        "audit": {
+            "ignore": {
+                "PKSA-nktx-f1n1-b4yd": "fixture: an ignored advisory must not fail the audit"
+            }
+        }
+    }
+}

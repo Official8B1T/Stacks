@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · web/audit/action.yml — dependency audit step for Web Stack sites
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+# Composite, not a script in web.yml: a reusable workflow runs with the
+# caller's token, which cannot read this private repo; an action can.
+
+name: Web Stack audit
+description: composer audit that fails on findings the change adds, not on ones already in the base
+
+inputs:
+  base:
+    description: directory with the base composer.json and composer.lock; empty = every finding counts
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+      run: php "$GITHUB_ACTION_PATH/audit.php" "$GITHUB_WORKSPACE" ${BASE:+"$BASE"}

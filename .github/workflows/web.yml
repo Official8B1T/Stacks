@@ -1,0 +1,205 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · web.yml — Web Stack gate: audit, boot the site, merge safe Dependabot PRs
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+# Called by every Web Stack site (Kirby 5, PHP 8.4, Plesk) from its own
+# .github/workflows/web.yml; site differences are the inputs below, nothing else.
+# Turns Dependabot's "a new version exists" into "the new version works here".
+#
+# WARN · a check that cannot fail is a ritual. The site really boots, every
+#        page from Kirby is requested, one URL MUST 404, assets are judged by
+#        status and size. Do not weaken any of these to make a run green.
+# NOTE · access: repo settings → Actions → Access → "Accessible from
+#        repositories owned by the user", or callers cannot use this file.
+
+name: Web Stack
+
+on:
+  workflow_call:
+    inputs:
+      php-extensions:
+        description: extensions on top of the Kirby baseline, comma separated
+        type: string
+        default: ""
+      site-tests:
+        description: site's own test command, run after install (empty = none)
+        type: string
+        default: ""
+      min-assets:
+        description: fewest local stylesheets and scripts the home page must link
+        type: number
+        default: 5
+
+permissions:
+  contents: read
+
+jobs:
+  kontrola:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2 # pull_request: HEAD^1 of the merge commit is the base
+
+      # Production runs PHP 8.4; another version would test another environment.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, gd, ctype, curl, dom, fileinfo, simplexml, zip${{ inputs.php-extensions != '' && format(', {0}', inputs.php-extensions) || '' }}
+          coverage: none
+
+      # --strict turns warnings into errors, e.g. a manifest without a licence.
+      - name: composer.json and composer.lock agree
+        run: composer validate --strict
+
+      - name: Install from the lock
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      # The base is what this change is compared against; schedule and manual
+      # runs have none, so everything known counts there.
+      - name: Base for the audit
+        id: base
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            pull_request) ref=HEAD^1 ;;
+            push)
+              ref=$BEFORE
+              case "$ref" in ''|0000000000000000000000000000000000000000) ref= ;; *) git fetch -q --depth=1 origin "$ref" ;; esac ;;
+            *) ref= ;;
+          esac
+          if [ -n "$ref" ] && git cat-file -e "$ref:composer.lock" 2>/dev/null; then
+            mkdir -p "$RUNNER_TEMP/base"
+            git show "$ref:composer.json" > "$RUNNER_TEMP/base/composer.json"
+            git show "$ref:composer.lock" > "$RUNNER_TEMP/base/composer.lock"
+            echo "dir=$RUNNER_TEMP/base" >> "$GITHUB_OUTPUT"
+            echo "Audit base: $ref"
+          else
+            echo "Audit base: none, every finding counts"
+          fi
+
+      - name: Known vulnerabilities
+        uses: Official8B1T/Stacks/web/audit@main
+        with:
+          base: ${{ steps.base.outputs.dir }}
+
+      - name: Site tests
+        if: inputs.site-tests != ''
+        env:
+          SITE_TESTS: ${{ inputs.site-tests }}
+        run: bash -c "$SITE_TESTS"
+
+      # Taken from Kirby, never hand-written: a new page is checked at once.
+      - name: Page URLs from content
+        run: |
+          php -r '
+            require "kirby/bootstrap.php";
+            $kirby = new Kirby\Cms\App(["roots" => ["index" => getcwd()]]);
+            foreach ($kirby->site()->index() as $page) {
+                if ($page->intendedTemplate()->name() === "error") { continue; }
+                // home lives at "/", /home answers 302
+                echo $page->isHomePage() ? "/\n" : "/" . $page->uri() . "\n";
+            }
+          ' | tee urls.txt
+          test -s urls.txt
+
+      - name: Boot the site
+        run: |
+          php -S 127.0.0.1:8900 kirby/router.php &> server.log &
+          for i in $(seq 1 30); do
+            curl -sSf -o /dev/null "http://127.0.0.1:8900/" && break
+            sleep 1
+          done
+          curl -sSf -o /dev/null "http://127.0.0.1:8900/"
+
+      - name: Every URL answers as expected
+        run: |
+          errors=0
+          expect() {
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:8900$1")
+            if [ "$code" != "$2" ]; then
+              echo "FAIL  $1 → $code, expected $2"; errors=$((errors + 1))
+            else
+              echo "ok    $1 → $code"
+            fi
+          }
+          while read -r url; do expect "$url" 200; done < urls.txt
+          expect /robots.txt 200
+          expect /panel 302
+          expect /this-url-never-existed 404 # proves a broken site cannot pass
+          if [ "$errors" -gt 0 ]; then
+            echo "---- server.log ----"; cat server.log; exit 1
+          fi
+
+      # 2026-09-20 regression: a server-wide CSP blanked the Panel.
+      - name: CSP on public pages, not on the Panel
+        run: |
+          errors=0
+          if curl -sS -D - -o /dev/null "http://127.0.0.1:8900/" | grep -qi "content-security-policy:.*script-src"; then
+            echo "ok    public page carries the policy"
+          else
+            echo "FAIL  public page has no script-src"; errors=$((errors + 1))
+          fi
+          if curl -sSL -D - -o /dev/null "http://127.0.0.1:8900/panel" | grep -qi "content-security-policy:.*script-src"; then
+            echo "FAIL  Panel received our policy, it would render blank"; errors=$((errors + 1))
+          else
+            echo "ok    Panel keeps its own policy"
+          fi
+          test "$errors" -eq 0
+
+      # 2026-09-14: a page answered 200 with its stylesheet gone.
+      - name: Linked stylesheets and scripts
+        env:
+          MIN_ASSETS: ${{ inputs.min-assets }}
+        run: |
+          errors=0
+          count=0
+          for url in $(curl -sS "http://127.0.0.1:8900/" \
+              | grep -oE '(href|src)="http://127.0.0.1:8900/assets/[^"]+"' \
+              | sed -E 's/^(href|src)="//; s/"$//'); do
+            count=$((count + 1))
+            answer=$(curl -sS -o /dev/null -w '%{http_code} %{size_download}' "$url")
+            code=${answer% *}; size=${answer#* }
+            # WARN · size alone is not enough: a missing file returns a ~10 kB error PAGE
+            if [ "$code" != "200" ] || [ "$size" -lt 100 ]; then
+              echo "FAIL  $url → $code, $size B"; errors=$((errors + 1))
+            else
+              echo "ok    $url → $size B"
+            fi
+          done
+          # zero found means the check is broken, not that the page is clean
+          test "$count" -ge "$MIN_ASSETS"
+          test "$errors" -eq 0
+
+  # Official pattern (GitHub docs, "Automating Dependabot with GitHub Actions").
+  # update-type is the highest change in the PR, so grouped PRs work too;
+  # the former title parser could not read them (RawPlanet PR #1, 2026-11-02).
+  slouceni:
+    needs: kontrola
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: What the update is
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Merge unless it is a major version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+        run: |
+          echo "Update: $UPDATE_TYPE"
+          case "$UPDATE_TYPE" in
+            version-update:semver-minor|version-update:semver-patch)
+              gh pr merge "$PR_URL" --squash --delete-branch ;;
+            *)
+              echo "::notice::$UPDATE_TYPE is left for a human" ;;
+          esac

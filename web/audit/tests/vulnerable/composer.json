@@ -1,0 +1,8 @@
+{
+    "name": "stacks/audit-fixture",
+    "description": "Audit test fixture",
+    "license": "proprietary",
+    "require": {
+        "symfony/yaml": "7.4.21"
+    }
+}

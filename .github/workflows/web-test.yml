@@ -1,0 +1,55 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · web-test.yml — proves the Web Stack audit can pass AND fail
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+# Every site's gate depends on web/audit, so a change to it must show
+# each verdict on a known input before it reaches them via @main.
+# NOTE · fixtures pin symfony/yaml 7.4.21 (PKSA-nktx-f1n1-b4yd) vs 7.4.23;
+#        the advisory is permanent, so the expectations stay stable.
+
+name: Web Stack tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          coverage: none
+
+      - name: Every verdict on a known input
+        run: |
+          t=web/audit/tests
+          fail=0
+
+          expect() {
+            want=$1; shift
+            php web/audit/audit.php "$@" > out.txt && got=0 || got=$?
+            if [ "$got" -ne "$want" ]; then
+              echo "FAIL  audit $* → $got, expected $want"; cat out.txt; fail=1
+            else
+              echo "ok    audit $* → $got"
+            fi
+          }
+
+          expect 0 $t/clean
+          expect 1 $t/vulnerable
+          expect 0 $t/ignored                      # composer audit.ignore is honoured
+          expect 1 $t/vulnerable $t/clean          # change adds an advisory → block
+          expect 0 $t/vulnerable $t/vulnerable     # already in base → warn, do not block
+          expect 0 $t/clean $t/vulnerable          # change fixes it
+          expect 2 $t/does-not-exist               # audit cannot run → fail closed
+
+          exit $fail

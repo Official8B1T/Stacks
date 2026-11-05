@@ -1,0 +1,22 @@
+{
+    "_readme": [
+        "Test fixture: only the package and version matter to composer audit --locked."
+    ],
+    "content-hash": "",
+    "packages": [
+        {
+            "name": "symfony/yaml",
+            "version": "v7.4.21",
+            "type": "library"
+        }
+    ],
+    "packages-dev": [],
+    "aliases": [],
+    "minimum-stability": "stable",
+    "stability-flags": {},
+    "prefer-stable": false,
+    "prefer-lowest": false,
+    "platform": {},
+    "platform-dev": {},
+    "plugin-api-version": "2.6.0"
+}
