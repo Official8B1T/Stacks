@@ -1,0 +1,59 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · web-monitor.yml — every 10 min: is every live Web Stack site up
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+# Sites: web/monitor/weby.json. Two failed checks in a row open an issue in
+# the site's own (private) repo; the e-mail carries what exactly fails.
+# NOTE · lives in this public repo because Actions minutes are free here;
+#        ~4 300 runs a month would exhaust a private plan and stop every gate.
+# WARN · GitHub may delay or drop scheduled runs under load, mostly at the top
+#        of the hour (docs), hence minute 3; treat it as best effort, not SLA.
+# WARN · MONITOR_TOKEN = fine-grained PAT, Issues read/write on the site repos.
+#        Every run proves it still works, so an expired token turns this red.
+
+name: Web Stack monitor
+
+on:
+  schedule:
+    - cron: "3-59/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-monitor # state is per run chain; two at once would race on it
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          coverage: none
+
+      # Failed-check counters from the previous run; caches are immutable per
+      # key, so each run saves its own and the newest is restored by prefix.
+      - name: Previous state
+        uses: actions/cache/restore@v6
+        with:
+          path: state.json
+          key: web-monitor-${{ github.run_id }}
+          restore-keys: web-monitor-
+
+      - name: Check every site
+        env:
+          GH_TOKEN: ${{ secrets.MONITOR_TOKEN }}
+        run: php web/monitor/monitor.php web/monitor/weby.json state.json --act
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: state.json
+          key: web-monitor-${{ github.run_id }}
