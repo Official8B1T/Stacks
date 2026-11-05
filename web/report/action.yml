@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · web/report/action.yml — readable failure report for a Web Stack run
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+
+name: Web Stack report
+description: posts what failed (PR comment or issue) and closes the issue once main is green again
+
+inputs:
+  token:
+    description: token with issues and pull-requests write, actions read
+    required: true
+  result:
+    description: failure or success of the run's other jobs
+    required: true
+  pr-number:
+    description: pull request number on pull_request events
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        RESULT: ${{ inputs.result }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+      run: bash "$GITHUB_ACTION_PATH/report.sh"
