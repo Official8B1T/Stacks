@@ -53,3 +53,26 @@ jobs:
           expect 2 $t/does-not-exist               # audit cannot run → fail closed
 
           exit $fail
+
+      # fix.php rewrites composer.lock, so each case runs on a copy.
+      - name: Nightly fix tells fixable from unfixable
+        run: |
+          t=web/audit/tests
+          fail=0
+
+          plan() {
+            work=$(mktemp -d); cp "$t/$1"/composer.* "$work/"
+            php web/audit/fix.php "$work" > out.txt 2>&1 && code=0 || code=$?
+            got=$(grep -oE '^(FIXED|UNFIXABLE) [^ ]+' out.txt | tr '\n' ' ' | sed 's/ $//')
+            if [ "$code" -ne 0 ] || [ "$got" != "$2" ]; then
+              echo "FAIL  fix $1 → exit $code, [$got], expected [$2]"; cat out.txt; fail=1
+            else
+              echo "ok    fix $1 → [$got]"
+            fi
+          }
+
+          plan clean ""
+          plan fixable "FIXED PKSA-nktx-f1n1-b4yd"           # constraint allows 7.4.23
+          plan vulnerable "UNFIXABLE PKSA-nktx-f1n1-b4yd"    # pinned to 7.4.21, like Kirby pins it
+
+          exit $fail

@@ -58,8 +58,10 @@ jobs:
       - name: Install from the lock
         run: composer install --no-interaction --no-progress --prefer-dist
 
-      # The base is what this change is compared against; schedule and manual
-      # runs have none, so everything known counts there.
+      # The base is what this change is compared against. On main, schedule and
+      # manual runs compare main with itself: what is known there is the job of
+      # `oprava` below (fix PR or issue), not a reason to fail every night.
+      # Any other branch run by hand is compared with main.
       - name: Base for the audit
         id: base
         env:
@@ -70,6 +72,8 @@ jobs:
             push)
               ref=$BEFORE
               case "$ref" in ''|0000000000000000000000000000000000000000) ref= ;; *) git fetch -q --depth=1 origin "$ref" ;; esac ;;
+            schedule|workflow_dispatch)
+              if [ "$GITHUB_REF_NAME" = main ]; then ref=HEAD; else git fetch -q --depth=1 origin main; ref=FETCH_HEAD; fi ;;
             *) ref= ;;
           esac
           if [ -n "$ref" ] && git cat-file -e "$ref:composer.lock" 2>/dev/null; then
@@ -85,6 +89,7 @@ jobs:
       - name: Known vulnerabilities
         uses: Official8B1T/Stacks/web/audit@main
         with:
+          mode: gate
           base: ${{ steps.base.outputs.dir }}
 
       - name: Site tests
@@ -203,3 +208,55 @@ jobs:
             *)
               echo "::notice::$UPDATE_TYPE is left for a human" ;;
           esac
+
+  # Nightly on main: what an update fixes becomes a PR on stacks/audit-oprava,
+  # what it cannot fix becomes one issue per advisory (closed once it is gone).
+  oprava:
+    needs: kontrola
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+
+      # same platform as the gate, or composer resolves for another environment
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, gd, ctype, curl, dom, fileinfo, simplexml, zip${{ inputs.php-extensions != '' && format(', {0}', inputs.php-extensions) || '' }}
+          coverage: none
+
+      - name: Fix or track every known finding
+        uses: Official8B1T/Stacks/web/audit@main
+        with:
+          mode: fix
+          token: ${{ github.token }}
+          caller-workflow: ${{ github.workflow_ref }}
+
+  # The fix PR's check runs by workflow_dispatch on its branch (a PR opened
+  # with GITHUB_TOKEN gets no run of its own); once `kontrola` passed there, merge.
+  slouceni-opravy:
+    needs: kontrola
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'stacks/audit-oprava'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Merge the fix if it only touches composer.lock
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head stacks/audit-oprava --state open --json number --jq '.[0].number // empty')
+          if [ -z "$pr" ]; then echo "No open PR for stacks/audit-oprava, nothing to merge."; exit 0; fi
+          files=$(gh pr diff "$pr" --repo "$GITHUB_REPOSITORY" --name-only)
+          echo "PR #$pr changes: $files"
+          # WARN · anyone with write access can dispatch on this branch; only a lock-only diff may merge unattended
+          if [ "$files" != "composer.lock" ]; then
+            echo "::error::PR #$pr changes more than composer.lock, left for a human"; exit 1
+          fi
+          gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash --delete-branch

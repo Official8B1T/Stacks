@@ -1,24 +1,51 @@
 # ─────────────────────────────────────────────────────
 #   project · Stacks
-#   module  · web/audit/action.yml — dependency audit step for Web Stack sites
+#   module  · web/audit/action.yml — dependency audit steps for Web Stack sites
 #   author  · Jiří "8B1T" Lhotský
 # ─────────────────────────────────────────────────────
 # Composite, not a script in web.yml: a reusable workflow runs with the
 # caller's token, which cannot read this private repo; an action can.
 
 name: Web Stack audit
-description: composer audit that fails on findings the change adds, not on ones already in the base
+description: gate = fail on findings the change adds; fix = nightly fix PR and issues for the rest
 
 inputs:
+  mode:
+    description: gate or fix
+    required: false
+    default: gate
   base:
-    description: directory with the base composer.json and composer.lock; empty = every finding counts
+    description: "gate: directory with the base composer.json and composer.lock; empty = every finding counts"
+    required: false
+    default: ""
+  token:
+    description: "fix: token allowed to push, open PRs and issues, dispatch workflows"
+    required: false
+    default: ""
+  caller-workflow:
+    description: "fix: github.workflow_ref of the calling site workflow"
     required: false
     default: ""
 
 runs:
   using: composite
   steps:
-    - shell: bash
+    - if: inputs.mode == 'gate'
+      shell: bash
       env:
         BASE: ${{ inputs.base }}
       run: php "$GITHUB_ACTION_PATH/audit.php" "$GITHUB_WORKSPACE" ${BASE:+"$BASE"}
+
+    - if: inputs.mode == 'fix'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        WORKFLOW_REF: ${{ inputs.caller-workflow }}
+      run: |
+        # owner/repo/.github/workflows/web.yml@refs/heads/main → .github/workflows/web.yml
+        ref=${WORKFLOW_REF#*/*/}
+        export CALLER_WORKFLOW=${ref%%@*}
+        # NOTE · docs do not state which file workflow_ref names inside a called workflow; prove it is the site's
+        echo "Caller workflow: $CALLER_WORKFLOW"
+        test -f "$GITHUB_WORKSPACE/$CALLER_WORKFLOW"
+        php "$GITHUB_ACTION_PATH/fix.php" "$GITHUB_WORKSPACE" --act

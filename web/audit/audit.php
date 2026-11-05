@@ -10,32 +10,7 @@
 // NOTE · an advisory already present in the base must not block an unrelated
 //        update; on 2026-11-05 it held back a security fix on RawPlanet.
 
-// ── AUDIT ──────────────────────────────────────────────
-
-// Advisory id → description, plus "abandoned:<package>" for abandoned packages.
-function findings(string $dir): array
-{
-    $cmd = 'composer audit --locked --format=json --no-interaction --working-dir=' . escapeshellarg($dir);
-    exec($cmd, $out, $code);
-    $data = json_decode(implode("\n", $out), true);
-    if (!is_array($data)) {
-        echo "::error title=Dependency audit::composer audit in $dir returned no JSON (exit $code)\n";
-        exit(2);
-    }
-
-    $found = [];
-    foreach ($data['advisories'] ?? [] as $package => $list) {
-        foreach ($list as $a) {
-            $found[$a['advisoryId']] = "$package · {$a['title']} · {$a['link']}";
-        }
-    }
-    foreach ($data['abandoned'] ?? [] as $package => $replacement) {
-        $found["abandoned:$package"] = "$package is abandoned" . ($replacement ? ", use $replacement" : '');
-    }
-    return $found;
-}
-
-// ── MAIN ───────────────────────────────────────────────
+require __DIR__ . '/findings.php';
 
 $head = $argv[1] ?? '';
 $base = $argv[2] ?? '';
@@ -47,11 +22,11 @@ if ($head === '') {
 $now = findings($head);
 $new = $base === '' ? $now : array_diff_key($now, findings($base));
 
-foreach (array_diff_key($now, $new) as $id => $text) {
-    echo "::warning title=Known before this change::$id · $text\n";
+foreach (array_diff_key($now, $new) as $id => $f) {
+    echo "::warning title=Known before this change::$id · {$f['text']}\n";
 }
-foreach ($new as $id => $text) {
-    echo "::error title=Dependency audit::$id · $text\n";
+foreach ($new as $id => $f) {
+    echo "::error title=Dependency audit::$id · {$f['text']}\n";
 }
 echo count($now) . ' finding(s), ' . count($new) . ' new' . ($base === '' ? ' (no base, all count as new)' : '') . "\n";
 exit($new ? 1 : 0);
