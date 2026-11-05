@@ -48,11 +48,21 @@ report=$(mktemp)
     echo "- **$name** → krok: ${steps:-?}"
     echo
     echo '```'
+    # a finished job's log can lag behind its conclusion; retry, then say so
+    log=$(mktemp)
+    for attempt in 1 2 3 4 5 6; do
+      gh api "repos/$repo/actions/jobs/$id/logs" > "$log" 2>&1 && [ -s "$log" ] && grep -q 'Z ' "$log" && break
+      sleep 10
+    done
     # our checks print "FAIL …", the runner "##[error]…"; timestamps cut off
-    gh api "repos/$repo/actions/jobs/$id/logs" 2>/dev/null |
-      sed -E 's/^[0-9TZ:.-]+ //' |
+    lines=$(sed -E 's/^[^ ]*[0-9]Z //' "$log" |
       grep -E '^(FAIL |##\[error\]|::error)' | grep -v 'Process completed with exit code' |
-      sed -E 's/^##\[error\]//' | head -30 || true
+      sed -E 's/^##\[error\]//' | head -30 || true)
+    if [ -n "$lines" ]; then
+      echo "$lines"
+    else
+      echo "(řádky s chybou se z logu nepodařilo vyčíst: $(head -c 200 "$log" | tr '\n' ' '))"
+    fi
     echo '```'
     echo
   done
