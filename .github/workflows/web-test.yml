@@ -50,6 +50,8 @@ jobs:
           expect 1 $t/vulnerable $t/clean          # change adds an advisory → block
           expect 0 $t/vulnerable $t/vulnerable     # already in base → warn, do not block
           expect 0 $t/clean $t/vulnerable          # change fixes it
+          expect 0 $t/vulnerable $t/ignored        # dropping an ignore is not a new finding
+          expect 0 $t/ignored $t/clean             # adding an ignore hides it, nothing new
           expect 2 $t/does-not-exist               # audit cannot run → fail closed
 
           exit $fail

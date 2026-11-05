@@ -20,7 +20,16 @@ if ($head === '') {
 }
 
 $now = findings($head);
-$new = $base === '' ? $now : array_diff_key($now, findings($base));
+$new = $now;
+if ($base !== '') {
+    // The base lock is judged by the CURRENT composer.json: dropping an ignore
+    // changes the rules, not the dependencies, and must not count as new.
+    $judge = sys_get_temp_dir() . '/stacks-audit-base-' . getmypid();
+    @mkdir($judge);
+    copy("$head/composer.json", "$judge/composer.json");
+    copy("$base/composer.lock", "$judge/composer.lock");
+    $new = array_diff_key($now, findings($judge));
+}
 
 foreach (array_diff_key($now, $new) as $id => $f) {
     echo "::warning title=Known before this change::$id · {$f['text']}\n";
