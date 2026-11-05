@@ -1,0 +1,5 @@
+[
+  { "web": "healthy", "url": "https://example.com/", "repo": "-" },
+  { "web": "no-dns", "url": "https://stacks-monitor-test.invalid/", "repo": "-" },
+  { "web": "refused", "url": "https://127.0.0.1:9/", "repo": "-" }
+]

@@ -206,7 +206,8 @@ jobs:
             version-update:semver-minor|version-update:semver-patch)
               gh pr merge "$PR_URL" --squash --delete-branch ;;
             *)
-              echo "::notice::$UPDATE_TYPE is left for a human" ;;
+              echo "::notice::$UPDATE_TYPE is left for a human"
+              gh pr comment "$PR_URL" --body "Kontrola prošla, ale tohle je **${UPDATE_TYPE#version-update:}** — sama se neslučuje. Projdi poznámky k vydání a slouč ručně, nebo PR zavři." ;;
           esac
 
   # Nightly on main: what an update fixes becomes a PR on stacks/audit-oprava,
@@ -260,3 +261,19 @@ jobs:
             echo "::error::PR #$pr changes more than composer.lock, left for a human"; exit 1
           fi
           gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
+
+  # GitHub's failure e-mail says only "All jobs have failed"; this one says what.
+  hlaseni:
+    needs: [kontrola, slouceni, oprava, slouceni-opravy]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: Official8B1T/Stacks/web/report@main
+        with:
+          token: ${{ github.token }}
+          result: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
+          pr-number: ${{ github.event.pull_request.number }}

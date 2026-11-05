@@ -3,8 +3,8 @@
 #   module  · web/audit/action.yml — dependency audit steps for Web Stack sites
 #   author  · Jiří "8B1T" Lhotský
 # ─────────────────────────────────────────────────────
-# Composite, not a script in web.yml: a reusable workflow runs with the
-# caller's token, which cannot read this private repo; an action can.
+# Composite, not a script in web.yml: a reusable workflow runs in the
+# caller's workspace and cannot see this repo's files; an action brings them.
 
 name: Web Stack audit
 description: gate = fail on findings the change adds; fix = nightly fix PR and issues for the rest

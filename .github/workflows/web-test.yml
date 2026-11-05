@@ -78,3 +78,34 @@ jobs:
           plan vulnerable "UNFIXABLE PKSA-nktx-f1n1-b4yd"    # pinned to 7.4.21, like Kirby pins it
 
           exit $fail
+
+      # Same state file across runs: first failure only counts, the second
+      # alerts, a healthy check after an alert recovers.
+      - name: Monitor alerts on the second failure, not the first
+        run: |
+          m="php web/monitor/monitor.php web/monitor/tests/weby.json state.json"
+          fail=0
+          rm -f state.json
+
+          verdicts() { grep -oE '^(OK|FAIL|ALERT|RECOVER) [^ ]+' out.txt | tr '\n' ' ' | sed 's/ $//'; }
+          step() {
+            $m > out.txt 2>&1 && code=0 || code=$?
+            got=$(verdicts)
+            if [ "$code" -ne 0 ] || [ "$got" != "$1" ]; then
+              echo "FAIL  run $2 → exit $code, [$got], expected [$1]"; cat out.txt; fail=1
+            else
+              echo "ok    run $2 → [$got]"
+            fi
+          }
+
+          step "OK healthy FAIL no-dns FAIL refused" 1
+          grep -q "DNS: stacks-monitor-test.invalid" out.txt || { echo "FAIL  DNS reason missing"; fail=1; }
+          grep -q "nepřijímá spojení" out.txt || { echo "FAIL  refused reason missing"; fail=1; }
+          step "OK healthy ALERT no-dns ALERT refused" 2
+
+          # the broken sites come back: point them at the healthy URL
+          sed -i 's#https://stacks-monitor-test.invalid/#https://example.com/#; s#https://127.0.0.1:9/#https://example.com/#' web/monitor/tests/weby.json
+          step "OK healthy RECOVER no-dns RECOVER refused" 3
+          step "OK healthy OK no-dns OK refused" 4
+
+          exit $fail
