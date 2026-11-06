@@ -75,7 +75,8 @@ jobs:
 
           plan clean ""
           plan fixable "FIXED PKSA-nktx-f1n1-b4yd"           # constraint allows 7.4.23
-          plan vulnerable "UNFIXABLE PKSA-nktx-f1n1-b4yd"    # pinned to 7.4.21, like Kirby pins it
+          plan vulnerable "UNFIXABLE PKSA-nktx-f1n1-b4yd"    # root pins 7.4.21, nothing may move it
+          plan parent "FIXED PKSA-nktx-f1n1-b4yd"            # Kirby 5.6.2 pins 7.4.21, Kirby 5.6.3 brings 7.4.23
 
           exit $fail
 

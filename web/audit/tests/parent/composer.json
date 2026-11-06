@@ -1,0 +1,13 @@
+{
+    "name": "stacks/audit-fixture",
+    "description": "Audit test fixture",
+    "license": "proprietary",
+    "require": {
+        "getkirby/cms": "5.6.*"
+    },
+    "config": {
+        "allow-plugins": {
+            "getkirby/composer-installer": true
+        }
+    }
+}
