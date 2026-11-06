@@ -46,15 +46,34 @@ function must(string $cmd): string
     return $text;
 }
 
-// ── PLAN ───────────────────────────────────────────────
+// Locked packages that require $package, directly or through other locked packages.
+function dependents(string $lock, string $package): array
+{
+    $data = json_decode(file_get_contents($lock), true);
+    $parents = [];
+    foreach (array_merge($data['packages'] ?? [], $data['packages-dev'] ?? []) as $p) {
+        foreach (array_keys($p['require'] ?? []) as $dep) {
+            $parents[strtolower($dep)][] = $p['name'];
+        }
+    }
+    $seen = [];
+    $todo = [strtolower($package)];
+    while ($todo) {
+        foreach ($parents[array_pop($todo)] ?? [] as $name) {
+            if (!isset($seen[$name])) {
+                $seen[$name] = true;
+                $todo[] = strtolower($name);
+            }
+        }
+    }
+    return array_keys($seen);
+}
 
-$lock = "$dir/composer.lock";
-$before = findings($dir);
-
-// One package at a time, so a package nothing can fix does not block one that can.
-foreach (array_unique(array_column($before, 'package')) as $package) {
+// Updates $packages in the lock; keeps the change only if an advisory of $package is gone.
+function attempt(string $dir, string $lock, array $packages, string $package, array $before): bool
+{
     $saved = file_get_contents($lock);
-    $code = run('composer update ' . escapeshellarg($package) . ' --with-all-dependencies --no-install'
+    $code = run('composer update ' . implode(' ', array_map('escapeshellarg', $packages)) . ' --with-all-dependencies --no-install'
         . ' --no-scripts --no-plugins --no-interaction --working-dir=' . escapeshellarg($dir));
     $gone = $code === 0 && array_diff_key(
         array_filter($before, fn ($f) => $f['package'] === $package),
@@ -62,6 +81,21 @@ foreach (array_unique(array_column($before, 'package')) as $package) {
     );
     if (!$gone) {
         file_put_contents($lock, $saved); // no gain, keep the lock untouched
+    }
+    return (bool) $gone;
+}
+
+// ── PLAN ───────────────────────────────────────────────
+
+$lock = "$dir/composer.lock";
+$before = findings($dir);
+
+// One package at a time, so a package nothing can fix does not block one that can.
+// NOTE · a parent may pin the package (Kirby pins symfony/yaml), then only a parent
+//        update brings the fix; composer.json constraints still cap every version.
+foreach (array_unique(array_column($before, 'package')) as $package) {
+    if (!attempt($dir, $lock, [$package], $package, $before) && ($parents = dependents($lock, $package))) {
+        attempt($dir, $lock, [$package, ...$parents], $package, $before);
     }
 }
 
@@ -125,8 +159,8 @@ foreach ($left as $id => $f) {
     }
     must('gh issue create --repo ' . $q($repo) . ' --label ' . LABEL
         . ' --title ' . $q("Audit: $id · {$f['package']}")
-        . ' --body ' . $q("{$f['text']}\n\n`composer update {$f['package']} -W` nenašel verzi bez téhle zranitelnosti: "
-            . "blokuje ji nadřazený balíček, nebo oprava zatím nevyšla. Kontrola PR ji jen hlásí, nesouvisející aktualizace neblokuje.\n\n"
+        . ' --body ' . $q("{$f['text']}\n\n`composer update {$f['package']} -W` ani spolu s balíčky, které na něm závisí, nenašel verzi bez téhle zranitelnosti: "
+            . "brání tomu omezení verzí v `composer.json`, nebo oprava zatím nevyšla. Kontrola PR ji jen hlásí, nesouvisející aktualizace neblokuje.\n\n"
             . "Issue se zavře samo, až zranitelnost z `main` zmizí. Rozhodnutí o riziku patří sem.\n\nBěh: $runUrl"));
 }
 
