@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────
 #   project · Stacks
-#   module  · dependabot.yml — keep SHA-pinned third-party actions current
+#   module  · dependabot.yml — keep SHA-pinned actions and web/a11y packages current
 #   author  · Jiří "8B1T" Lhotský
 # ─────────────────────────────────────────────────────
 # Actions are pinned to full commit SHAs (GitHub security hardening guide);
@@ -16,4 +16,13 @@ updates:
       interval: weekly
     groups:
       actions:
+        patterns: ["*"]
+
+  # web/a11y (axe-core + Playwright), installed from the lock in every site's run
+  - package-ecosystem: npm
+    directory: /web/a11y
+    schedule:
+      interval: weekly
+    groups:
+      a11y:
         patterns: ["*"]

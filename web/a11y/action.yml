@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · web/a11y/action.yml — WCAG 2.2 AA check of a running Web Stack site
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+# Expects the site already booted (web.yml → kontrola). Versions come from
+# package-lock.json (npm ci), Dependabot keeps them current.
+
+name: Web Stack accessibility
+description: opens every page at desktop and phone width and checks it with axe-core
+
+inputs:
+  base-url:
+    description: where the site answers, e.g. http://127.0.0.1:8900
+    required: true
+  urls:
+    description: file with one path per line
+    required: true
+  mode:
+    description: gate (fail on any violation) or report (list only)
+    required: false
+    default: gate
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: "24"
+
+    - shell: bash
+      run: npm ci --prefix "$GITHUB_ACTION_PATH" --no-audit --no-fund --ignore-scripts
+
+    - shell: bash
+      env:
+        BASE_URL: ${{ inputs.base-url }}
+        URLS: ${{ inputs.urls }}
+        MODE: ${{ inputs.mode }}
+      run: node "$GITHUB_ACTION_PATH/a11y.mjs" "$BASE_URL" "$URLS" "$MODE"
