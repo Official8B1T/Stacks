@@ -8,6 +8,9 @@
 # monitor would stop silently. A dated commit every 10 days is that activity,
 # and since this workflow is scheduled too, it keeps itself alive as well.
 # NOTE · "[skip ci]" keeps the commit from starting web-test.yml for nothing.
+# NOTE · pushes with deploy key KEEPALIVE_DEPLOY_KEY, the only bypass actor of
+#        ruleset 26754477 (CodeQL gate on main); a personal-account repo cannot
+#        list GitHub Actions as bypass actor (API 422), so GITHUB_TOKEN is refused.
 
 name: Keepalive
 
@@ -17,7 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read # the push goes through the deploy key, not GITHUB_TOKEN
 
 jobs:
   keepalive:
@@ -25,6 +28,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ssh-key: ${{ secrets.KEEPALIVE_DEPLOY_KEY }}
 
       - name: Dated commit
         run: |
