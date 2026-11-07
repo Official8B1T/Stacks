@@ -1,0 +1,9 @@
+[
+  { "web": "zdravy", "url": "http://127.0.0.1:8902/", "repo": "-", "zdravi": "zdravi-ok" },
+  { "web": "stary-tep", "url": "http://127.0.0.1:8902/", "repo": "-", "zdravi": "zdravi-stare" },
+  { "web": "chyba", "url": "http://127.0.0.1:8902/", "repo": "-", "zdravi": "zdravi-chyba" },
+  { "web": "rozjeta", "url": "http://127.0.0.1:8902/", "repo": "-", "zdravi": "zdravi-rozjeta" },
+  { "web": "bez-tepu", "url": "http://127.0.0.1:8902/", "repo": "-", "zdravi": "zdravi-bez-tepu" },
+  { "web": "plny-disk", "url": "http://127.0.0.1:8902/", "repo": "-", "zdravi": "zdravi-disk" },
+  { "web": "bez-pluginu", "url": "http://127.0.0.1:8902/", "repo": "-", "zdravi": "zdravi-chybi" }
+]
