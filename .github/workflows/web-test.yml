@@ -110,3 +110,36 @@ jobs:
           step "OK healthy OK no-dns OK refused" 4
 
           exit $fail
+
+  # web/a11y gates every site's pages; it must pass a clean page, fail a
+  # broken one on the named rules, stay quiet in report mode and refuse an
+  # empty URL list (an empty list would pass pages it never opened).
+  a11y:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+
+      - name: Accessibility check passes AND fails
+        run: |
+          npm ci --prefix web/a11y --no-audit --no-fund --ignore-scripts
+          (cd web/a11y/tests && python3 -m http.server 8901 > /dev/null 2>&1 &)
+          curl -sSf -o /dev/null --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8901/ok.html
+          echo /ok.html > ok.txt; echo /bad.html > bad.txt; : > empty.txt
+          check="node web/a11y/a11y.mjs http://127.0.0.1:8901"
+          fail=0
+
+          $check ok.txt gate || { echo "FAIL  clean page did not pass"; fail=1; }
+          if $check bad.txt gate > bad.out; then echo "FAIL  broken page passed the gate"; fail=1; fi
+          if grep -q "image-alt" bad.out && grep -q "link-name" bad.out; then
+            echo "ok    broken page failed on image-alt and link-name"
+          else
+            echo "FAIL  expected rules missing"; cat bad.out; fail=1
+          fi
+          $check bad.txt report > /dev/null || { echo "FAIL  report mode blocked"; fail=1; }
+          if $check empty.txt gate; then echo "FAIL  empty URL list passed"; fail=1; fi
+
+          exit $fail

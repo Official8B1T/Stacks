@@ -30,6 +30,10 @@ on:
         description: fewest local stylesheets and scripts the home page must link
         type: number
         default: 5
+      a11y:
+        description: WCAG 2.2 AA check of every page — gate (fail), report (list only) or off
+        type: string
+        default: report # TODO · gate once all three sites show zero findings in the run summary
     secrets:
       DEPLOY_URL:
         description: the site's git-content pull endpoint, without the secret
@@ -186,6 +190,15 @@ jobs:
           # zero found means the check is broken, not that the page is clean
           test "$count" -ge "$MIN_ASSETS"
           test "$errors" -eq 0
+
+      # Every page from Kirby at desktop and phone width, WCAG 2.2 A + AA rules.
+      - name: Accessibility
+        if: inputs.a11y != 'off'
+        uses: Official8B1T/Stacks/web/a11y@main
+        with:
+          base-url: http://127.0.0.1:8900
+          urls: urls.txt
+          mode: ${{ inputs.a11y }}
 
   # Official pattern (GitHub docs, "Automating Dependabot with GitHub Actions").
   # update-type is the highest change in the PR, so grouped PRs work too;

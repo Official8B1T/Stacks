@@ -1,0 +1,11 @@
+{
+  "name": "stacks-web-a11y",
+  "private": true,
+  "description": "WCAG 2.2 AA check of every Web Stack page (axe-core); see a11y.mjs",
+  "type": "module",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "playwright-core": "1.64.1"
+  }
+}
