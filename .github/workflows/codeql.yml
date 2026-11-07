@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · codeql.yml — CodeQL over the shared CI/CD of every stack (shift-left)
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+# Every stack's automation lives in this repo, so scanning it here covers the
+# pipelines of all stacks; site repos only call it. Language `actions` finds
+# workflow injection, over-broad token permissions and unpinned third-party code.
+# NOTE · PHP is not a CodeQL language (docs, supported languages) — site code
+#        is covered by the composer audit in web.yml and the security-audit gate.
+# NOTE · a new stack adds its language to the matrix, nothing else changes.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "41 5 * * 1" # weekly, new queries reach unchanged code too
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # upload results to code scanning
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: /language:${{ matrix.language }}

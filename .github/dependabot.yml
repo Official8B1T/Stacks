@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────
+#   project · Stacks
+#   module  · dependabot.yml — keep SHA-pinned third-party actions current
+#   author  · Jiří "8B1T" Lhotský
+# ─────────────────────────────────────────────────────
+# Actions are pinned to full commit SHAs (GitHub security hardening guide);
+# without this a pin would freeze security fixes out. One grouped PR a week.
+# NOTE · own references (Official8B1T/Stacks/...@main) stay on main on purpose:
+#        sites must pick up a fix to the shared pipeline without a change each.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

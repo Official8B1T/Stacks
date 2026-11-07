@@ -40,12 +40,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 2 # pull_request: HEAD^1 of the merge commit is the base
 
       # Production runs PHP 8.4; another version would test another environment.
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2 (2.40.0)
         with:
           php-version: "8.4"
           extensions: mbstring, gd, ctype, curl, dom, fileinfo, simplexml, zip${{ inputs.php-extensions != '' && format(', {0}', inputs.php-extensions) || '' }}
@@ -222,10 +222,10 @@ jobs:
       issues: write
       actions: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       # same platform as the gate, or composer resolves for another environment
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2 (2.40.0)
         with:
           php-version: "8.4"
           extensions: mbstring, gd, ctype, curl, dom, fileinfo, simplexml, zip${{ inputs.php-extensions != '' && format(', {0}', inputs.php-extensions) || '' }}
