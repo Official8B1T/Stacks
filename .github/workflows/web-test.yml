@@ -111,6 +111,31 @@ jobs:
 
           exit $fail
 
+      # A fake site answers /zdravi-<case> like site/plugins/zdravi in each
+      # state; only the healthy one may pass, a wrong token must fail and a
+      # missing token must stop the monitor instead of passing silently.
+      - name: Health check tells every server state apart
+        run: |
+          php -S 127.0.0.1:8902 web/monitor/tests/zdravi.php > /dev/null 2>&1 &
+          curl -sSf -o /dev/null --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8902/
+          m="php web/monitor/monitor.php web/monitor/tests/zdravi.json st.json"
+          verdicts() { grep -oE '^(OK|FAIL|ALERT|RECOVER) [^ ]+' out.txt | tr '\n' ' ' | sed 's/ $//'; }
+          fail=0
+
+          rm -f st.json; ZDRAVI_TOKEN=test-token $m > out.txt 2>&1 || { echo "FAIL  monitor exited"; cat out.txt; fail=1; }
+          want="OK zdravy FAIL stary-tep FAIL chyba FAIL rozjeta FAIL bez-tepu FAIL plny-disk FAIL bez-pluginu"
+          [ "$(verdicts)" = "$want" ] && echo "ok    every state → [$want]" || { echo "FAIL  got [$(verdicts)]"; cat out.txt; fail=1; }
+          for reason in "cron v /etc/cron.d neběží" "skončil kódem 1" "nestojí na ověřené větvi" "nezapsal tep" "zbývá 4.2 %" "vrací 404"; do
+            grep -q "$reason" out.txt || { echo "FAIL  reason missing: $reason"; fail=1; }
+          done
+
+          rm -f st.json; ZDRAVI_TOKEN=wrong $m > out.txt 2>&1
+          grep -q "^FAIL zdravy" out.txt && echo "ok    wrong token fails" || { echo "FAIL  wrong token passed"; fail=1; }
+
+          if ZDRAVI_TOKEN= $m > out.txt 2>&1; then echo "FAIL  missing token passed"; fail=1; else echo "ok    missing token stops the monitor"; fi
+
+          exit $fail
+
   # web/a11y gates every site's pages; it must pass a clean page, fail a
   # broken one on the named rules, stay quiet in report mode and refuse an
   # empty URL list (an empty list would pass pages it never opened).

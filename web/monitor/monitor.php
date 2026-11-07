@@ -9,6 +9,9 @@
 // Prints OK / FAIL / ALERT / RECOVER per site and rewrites state.json.
 // --act (needs GH_TOKEN with Issues read/write on every site repo): opens one
 // issue per outage in the site's repo, closes it with the duration on recovery.
+// A site with "zdravi" (path) is also asked how it is, with env ZDRAVI_TOKEN:
+// a stale or failed aktualizace.sh, a server off `nasazeno` or a full disk
+// count as a failed check like an outage does.
 // NOTE · a site that is down does not fail this run: the alert is the issue.
 //        The run fails only when the monitor itself cannot do its job.
 
@@ -17,6 +20,8 @@ date_default_timezone_set('Europe/Prague');
 const ALERT_AFTER = 2;     // consecutive failed checks before an issue
 const CERT_WARN_DAYS = 14; // Let's Encrypt renews at 30 days left, 14 means renewal failed
 const LABEL = 'vypadek';
+const ZDRAVI_MAX_HOURS = 2; // aktualizace.sh runs hourly; one missed run is noise, two are a broken cron
+const ZDRAVI_MIN_DISK = 10; // % free
 
 [$self, $sitesFile, $stateFile] = $argv + [null, '', ''];
 $act = in_array('--act', $argv, true);
@@ -30,10 +35,11 @@ $now = time();
 
 // ── CHECKS ─────────────────────────────────────────────
 
-function fetch(string $url): array
+function fetch(string $url, array $headers = []): array
 {
     $ch = curl_init($url);
     curl_setopt_array($ch, [
+        CURLOPT_HTTPHEADER => $headers,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_CONNECTTIMEOUT => 10,
@@ -99,6 +105,45 @@ function check(string $url): array
     return $p;
 }
 
+// What the server says about itself (site/plugins/zdravi + aktualizace.sh),
+// the part an outside probe cannot see; same plain-Czech list as check().
+function checkZdravi(string $url, string $token): array
+{
+    $r = fetch($url, ['X-Zdravi: ' . $token]);
+    if ($r['errno'] !== 0 || $r['code'] !== 200) {
+        return ["Zdraví $url vrací " . ($r['errno'] ? "chybu curl {$r['errno']}" : $r['code'])
+            . ' · plugin zdravi chybí, nebo ZDRAVI_TOKEN nesedí s webstack.zdraviHash v config.php'];
+    }
+    $d = json_decode($r['body'], true);
+    if (!is_array($d)) {
+        return ["Zdraví $url nevrací JSON · plugin zdravi"];
+    }
+
+    $p = [];
+    $beh = $d['beh'] ?? null;
+    if (!is_array($beh)) {
+        $p[] = 'aktualizace.sh ještě nezapsal tep (site/logs/zdravi.json chybí) · cron ho nespouští, nebo je na serveru stará verze skriptu';
+    } else {
+        $ts = strtotime((string) ($beh['cas'] ?? ''));
+        $hodin = $ts ? (time() - $ts) / 3600 : INF;
+        if ($hodin > ZDRAVI_MAX_HOURS) {
+            $p[] = 'aktualizace.sh naposledy běžel ' . ($ts ? 'před ' . round($hodin, 1) . ' h (' . date('j. n. H:i', $ts) . ')' : 'nikdy') . ' · cron v /etc/cron.d neběží';
+        }
+        if (($beh['kod'] ?? 0) !== 0) {
+            $p[] = "aktualizace.sh skončil kódem {$beh['kod']}: " . ($beh['chyba'] ?: '?') . ' · site/logs/aktualizace.log na serveru';
+        } elseif (($beh['chyba'] ?? '') !== '') {
+            $p[] = "aktualizace.sh hlásí: {$beh['chyba']} · site/logs/aktualizace.log na serveru";
+        }
+        if (($beh['aktualni'] ?? false) !== true) {
+            $p[] = 'Server nestojí na ověřené větvi nasazeno (HEAD ' . substr((string) ($beh['head'] ?? ''), 0, 7) . ', nasazeno ' . substr((string) ($beh['cil'] ?? ''), 0, 7) . ') · rozjetá historie, vyřešit ručně na serveru';
+        }
+    }
+    if (isset($d['disk']) && is_numeric($d['disk']) && $d['disk'] < ZDRAVI_MIN_DISK) {
+        $p[] = "Na disku serveru zbývá {$d['disk']} % · web brzy přestane zapisovat (relace, cache, objednávky)";
+    }
+    return $p;
+}
+
 // ── GITHUB ─────────────────────────────────────────────
 
 function gh(string $args): string
@@ -135,9 +180,20 @@ if ($act) {
     }
 }
 
+// a site that asks for a health check without the token would never alert
+$token = (string) getenv('ZDRAVI_TOKEN');
+if ($token === '' && array_filter(array_column($sites, 'zdravi'))) {
+    echo "::error title=Web monitor::ZDRAVI_TOKEN is not set, health checks cannot run\n";
+    exit(1);
+}
+
 foreach ($sites as $s) {
     $web = $s['web'];
     $problems = check($s['url']);
+    // only a site that answers can say how it is
+    if (!$problems && !empty($s['zdravi'])) {
+        $problems = checkZdravi(rtrim($s['url'], '/') . '/' . $s['zdravi'], $token);
+    }
     $prev = $state[$web] ?? ['fails' => 0, 'since' => null];
 
     if (!$problems) {

@@ -1,5 +1,5 @@
 [
-  { "web": "new.techlines.cz", "url": "https://new.techlines.cz/", "repo": "Official8B1T/TechLines.cz" },
-  { "web": "new.luthea.cz", "url": "https://new.luthea.cz/", "repo": "Official8B1T/Luthea" },
-  { "web": "new.rawplanet.cz", "url": "https://new.rawplanet.cz/", "repo": "Official8B1T/RawPlanet" }
+  { "web": "new.techlines.cz", "url": "https://new.techlines.cz/", "repo": "Official8B1T/TechLines.cz", "zdravi": "zdravi" },
+  { "web": "new.luthea.cz", "url": "https://new.luthea.cz/", "repo": "Official8B1T/Luthea", "zdravi": "zdravi" },
+  { "web": "new.rawplanet.cz", "url": "https://new.rawplanet.cz/", "repo": "Official8B1T/RawPlanet", "zdravi": "zdravi" }
 ]

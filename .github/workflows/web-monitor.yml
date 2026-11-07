@@ -49,6 +49,7 @@ jobs:
       - name: Check every site
         env:
           GH_TOKEN: ${{ secrets.MONITOR_TOKEN }}
+          ZDRAVI_TOKEN: ${{ secrets.ZDRAVI_TOKEN }}
         run: php web/monitor/monitor.php web/monitor/weby.json state.json --act
 
       - name: Save state

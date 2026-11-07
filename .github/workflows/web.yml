@@ -147,6 +147,7 @@ jobs:
           expect /robots.txt 200
           expect /panel 302
           expect /this-url-never-existed 404 # proves a broken site cannot pass
+          expect /zdravi 404 # health answers only the monitor's token (site/plugins/zdravi)
           if [ "$errors" -gt 0 ]; then
             echo "---- server.log ----"; cat server.log; exit 1
           fi
