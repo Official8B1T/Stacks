@@ -33,7 +33,7 @@ on:
       a11y:
         description: WCAG 2.2 AA check of every page — gate (fail), report (list only) or off
         type: string
-        default: report # TODO · gate once all three sites show zero findings in the run summary
+        default: gate # all three sites at zero findings, 7. 11. 2026
     secrets:
       DEPLOY_URL:
         description: the site's git-content pull endpoint, without the secret

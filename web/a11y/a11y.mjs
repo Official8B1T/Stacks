@@ -36,8 +36,10 @@ const found = []; // { path, width, id, impact, help, nodes }
 
 try {
   for (const width of WIDTHS) {
-    // axe opens helper pages in the same context, browser.newPage() would not allow it
-    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    // axe opens helper pages in the same context, browser.newPage() would not allow it.
+    // reducedMotion: judge the settled page; mid-reveal frames read as failed contrast
+    // (TechLines 7. 11.: 60+ false findings, all gone once animations were off)
+    const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
     const page = await context.newPage();
     for (const path of paths) {
       const res = await page.goto(new URL(path, base).href, { waitUntil: 'load' });
