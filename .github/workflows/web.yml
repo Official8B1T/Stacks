@@ -30,6 +30,13 @@ on:
         description: fewest local stylesheets and scripts the home page must link
         type: number
         default: 5
+    secrets:
+      DEPLOY_URL:
+        description: the site's git-content pull endpoint, without the secret
+        required: false
+      DEPLOY_SECRET:
+        description: the site's cronHooksSecret, sent in the POST body, never in the URL
+        required: false
 
 permissions:
   contents: read
@@ -262,9 +269,70 @@ jobs:
           fi
           gh pr merge "$pr" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
 
+  # Shift-left: the server gets only what this gate passed. Moves branch
+  # `nasazeno` (the target of the server's hourly catch-up in aktualizace.sh)
+  # to the checked commit, then asks the server to pull right away.
+  # Replaces the push webhook, which deployed before any check ran.
+  # NOTE · a merge made here with GITHUB_TOKEN starts no run of its own, so
+  #        the merge jobs are deployed from this run.
+  # NOTE · Dependabot runs see only Dependabot secrets: the site sets both
+  #        secrets for Actions AND for Dependabot.
+  nasazeni:
+    needs: [kontrola, slouceni, slouceni-opravy]
+    if: >-
+      always() && needs.kontrola.result == 'success' && (
+        (github.ref_name == 'main' && contains(fromJSON('["push","workflow_dispatch","schedule"]'), github.event_name))
+        || needs.slouceni.result == 'success' || needs.slouceni-opravy.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: nasazeni-${{ github.repository }}
+      cancel-in-progress: false # never drop a deploy, queue it
+    permissions:
+      contents: write # move branch nasazeno
+    steps:
+      - name: Move nasazeno, pull on the server
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY_URL: ${{ secrets.DEPLOY_URL }}
+          DEPLOY_SECRET: ${{ secrets.DEPLOY_SECRET }}
+          # on main the run checked exactly this commit; after a merge job it is the fresh merge
+          CHECKED: ${{ github.ref_name == 'main' && github.sha || '' }}
+        run: |
+          repo="repos/$GITHUB_REPOSITORY"
+          if [ -z "$DEPLOY_URL" ] || [ -z "$DEPLOY_SECRET" ]; then
+            # fail closed once the site switched over (branch exists), stay quiet before
+            if gh api "$repo/git/ref/heads/nasazeno" --silent 2>/dev/null; then
+              echo "::error::DEPLOY_URL or DEPLOY_SECRET missing for this run (Dependabot runs need them as Dependabot secrets too)"; exit 1
+            fi
+            echo "::notice::no deploy secrets, this site still deploys by push webhook"; exit 0
+          fi
+
+          main=$(gh api "$repo/commits/main" --jq .sha)
+          if [ -n "$CHECKED" ] && [ "$main" != "$CHECKED" ]; then
+            echo "::notice::main moved to ${main:0:7} after this run checked ${CHECKED:0:7}; that push deploys from its own run"
+            exit 0
+          fi
+
+          # force=false: only a fast-forward moves it, a rewritten main fails here instead of deploying
+          if gh api "$repo/git/ref/heads/nasazeno" --silent 2>/dev/null; then
+            gh api -X PATCH "$repo/git/refs/heads/nasazeno" -f sha="$main" -F force=false --silent
+          else
+            gh api -X POST "$repo/git/refs" -f ref=refs/heads/nasazeno -f sha="$main" --silent
+          fi
+          echo "nasazeno -> ${main:0:7}"
+
+          # the plugin answers a wrong secret with HTTP 200 and status "forbidden", so judge the body
+          body=$(curl -sS --fail-with-body --max-time 120 --retry 3 --retry-all-errors --retry-delay 20                    -X POST --data-urlencode "secret=$DEPLOY_SECRET" "$DEPLOY_URL") || true
+          echo "server: $body"
+          case "$body" in
+            *'"status":"ok"'*) ;;
+            *) echo "::error::the server did not confirm the pull; nasazeno is moved, aktualizace.sh catches up within the hour"; exit 1 ;;
+          esac
+
   # GitHub's failure e-mail says only "All jobs have failed"; this one says what.
   hlaseni:
-    needs: [kontrola, slouceni, oprava, slouceni-opravy]
+    needs: [kontrola, slouceni, oprava, slouceni-opravy, nasazeni]
     if: always()
     runs-on: ubuntu-latest
     permissions:
