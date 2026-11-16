@@ -52,8 +52,7 @@ jobs:
         env:
           WEBY_JSON: ${{ secrets.WEBY_JSON }}
         run: |
-          php -r 'foreach (json_decode(getenv("WEBY_JSON"), true) ?: [] as $s) foreach (["web", "url", "repo"] as $k) echo "::add-mask::{$s[$k]}
-";'
+          php -r 'foreach (json_decode(getenv("WEBY_JSON"), true) ?: [] as $s) foreach (["web", "url", "repo"] as $k) echo "::add-mask::{$s[$k]}\n";'
 
       - name: Check every site
         env:
