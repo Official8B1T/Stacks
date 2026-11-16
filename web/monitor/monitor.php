@@ -5,7 +5,9 @@
 //   author  · Jiří "8B1T" Lhotský
 // ─────────────────────────────────────────────────────
 
-// Usage: php monitor.php <sites.json> <state.json> [--act]
+// Usage: php monitor.php <sites.json|env> <state.json> [--act]
+// "env" reads the site list (same JSON) from the variable WEBY_JSON, so the list
+// can live in a secret; locally use a gitignored weby.json (see weby.example.json).
 // Prints OK / FAIL / ALERT / RECOVER per site and rewrites state.json.
 // --act (needs GH_TOKEN with Issues read/write on every site repo): opens one
 // issue per outage in the site's repo, closes it with the duration on recovery.
@@ -25,9 +27,9 @@ const ZDRAVI_MIN_DISK = 10; // % free
 
 [$self, $sitesFile, $stateFile] = $argv + [null, '', ''];
 $act = in_array('--act', $argv, true);
-$sites = json_decode((string) @file_get_contents($sitesFile), true);
+$sites = json_decode($sitesFile === 'env' ? (string) getenv('WEBY_JSON') : (string) @file_get_contents($sitesFile), true);
 if (!is_array($sites) || $stateFile === '') {
-    fwrite(STDERR, "usage: php monitor.php <sites.json> <state.json> [--act]\n");
+    fwrite(STDERR, "usage: php monitor.php <sites.json|env> <state.json> [--act]\n");
     exit(2);
 }
 $state = json_decode((string) @file_get_contents($stateFile), true) ?: [];

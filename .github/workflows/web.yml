@@ -203,7 +203,7 @@ jobs:
 
   # Official pattern (GitHub docs, "Automating Dependabot with GitHub Actions").
   # update-type is the highest change in the PR, so grouped PRs work too;
-  # the former title parser could not read them (RawPlanet PR #1, 2026-11-02).
+  # the former title parser could not read them (a client site PR #1, 2026-11-02).
   slouceni:
     needs: kontrola
     if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'

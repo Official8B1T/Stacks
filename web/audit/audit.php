@@ -8,7 +8,7 @@
 // Usage: php audit.php <project-dir> [<base-dir>]
 // Exit 0 = clean or nothing new, 1 = new finding, 2 = audit could not run (fail closed).
 // NOTE · an advisory already present in the base must not block an unrelated
-//        update; on 2026-11-05 it held back a security fix on RawPlanet.
+//        update; on 2026-11-05 it held back a security fix on a client site.
 
 require __DIR__ . '/findings.php';
 
