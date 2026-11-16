@@ -3,7 +3,8 @@
 #   module  · web-monitor.yml — every 10 min: is every live Web Stack site up
 #   author  · Jiří "8B1T" Lhotský
 # ─────────────────────────────────────────────────────
-# Sites: web/monitor/weby.json. Two failed checks in a row open an issue in
+# Sites: secret WEBY_JSON (JSON list, shape in web/monitor/weby.example.json).
+# Kept out of this public repo; the log masks every name from it. Two failed checks in a row open an issue in
 # the site's own (private) repo; the e-mail carries what exactly fails.
 # NOTE · lives in this public repo because Actions minutes are free here;
 #        ~4 300 runs a month would exhaust a private plan and stop every gate.
@@ -46,11 +47,19 @@ jobs:
           key: web-monitor-${{ github.run_id }}
           restore-keys: web-monitor-
 
+      # The log of a public repo is public: mask every name before any output.
+      - name: Mask site names
+        env:
+          WEBY_JSON: ${{ secrets.WEBY_JSON }}
+        run: |
+          php -r 'foreach (json_decode(getenv("WEBY_JSON"), true) ?: [] as $s) foreach (["web", "url", "repo"] as $k) echo "::add-mask::{$s[$k]}\n";'
+
       - name: Check every site
         env:
           GH_TOKEN: ${{ secrets.MONITOR_TOKEN }}
           ZDRAVI_TOKEN: ${{ secrets.ZDRAVI_TOKEN }}
-        run: php web/monitor/monitor.php web/monitor/weby.json state.json --act
+          WEBY_JSON: ${{ secrets.WEBY_JSON }}
+        run: php web/monitor/monitor.php env state.json --act
 
       - name: Save state
         if: always()

@@ -1,0 +1,4 @@
+[
+  { "web": "www.example.com", "url": "https://www.example.com/", "repo": "your-org/site-one", "zdravi": "zdravi" },
+  { "web": "shop.example.org", "url": "https://shop.example.org/", "repo": "your-org/site-two" }
+]

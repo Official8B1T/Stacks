@@ -88,6 +88,11 @@ jobs:
           fail=0
           rm -f state.json
 
+          # site list from the environment (production source) must work and fail closed
+          WEBY_JSON="$(cat web/monitor/tests/weby.json)" php web/monitor/monitor.php env env-state.json > out.txt 2>&1 || true
+          grep -q '^OK healthy' out.txt || { echo "FAIL  env site list not read"; cat out.txt; fail=1; }
+          WEBY_JSON= php web/monitor/monitor.php env env-state.json > out.txt 2>&1 && { echo "FAIL  empty WEBY_JSON must exit non-zero"; fail=1; } || true
+
           verdicts() { grep -oE '^(OK|FAIL|ALERT|RECOVER) [^ ]+' out.txt | tr '\n' ' ' | sed 's/ $//'; }
           step() {
             $m > out.txt 2>&1 && code=0 || code=$?
